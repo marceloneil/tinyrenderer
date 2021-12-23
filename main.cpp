@@ -1,3 +1,6 @@
+#include <iostream>
+
+#include "model.h"
 #include "tgaimage.h"
 
 using namespace std;
@@ -44,12 +47,53 @@ void line(int x0, int y0, int x1, int y1, TGAImage &image, const TGAColor &color
     }
 }
 
-int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
-    TGAImage image(100, 100, TGAImage::RGB);
-    for (int i = 0; i < 1e6; i += 1) {
-        line(13, 20, 80, 40, image, white);
-        line(20, 13, 40, 80, image, red);
-        line(80, 40, 13, 20, image, red);
+int main(int argc, char* argv[]) {
+    string filename = "obj/african_head/african_head.obj";
+    int width = 800;
+    int height = 800;
+
+    try {
+        switch (argc) {
+            case 4:
+                height = stoi(argv[3]);
+                if (height < 1) throw 1;
+                // fall through
+            case 3:
+                width = stoi(argv[2]);
+                if (width < 1) throw 1;
+                // fall through
+            case 2:
+                filename = argv[1];
+                // fall through
+            case 1:
+                break;
+            default:
+                throw 1;
+        }
+    } catch (...) {
+        cerr << "Usage: " << argv[0]
+             << " [ filename [ width (> 0) [ height (> 0) ] ] ]" << endl;
     }
+
+    Model model(filename);
+    TGAImage image(width, height, TGAImage::RGB);
+
+    for (int face = 0; face < model.nfaces(); face += 1) {
+        // draw a line from each vertex in a face to the next one
+        // there are three vertices in each face
+        for (int vertex = 0; vertex < 3; vertex += 1) {
+            vec3 v0 = model.vert(face, vertex);
+            vec3 v1 = model.vert(face, (vertex + 1) % 3);
+
+            // normalize vertex coordinates which are between -1.0 and 1.0
+            int x0 = (v0.x / 2.0 + 0.5) * width;
+            int y0 = (v0.y / 2.0 + 0.5) * height;
+            int x1 = (v1.x / 2.0 + 0.5) * width;
+            int y1 = (v1.y / 2.0 + 0.5) * height;
+
+            line(x0, y0, x1, y1, image, white);
+        }
+    }
+
     image.write_tga_file("output.tga");
 }
