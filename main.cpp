@@ -21,22 +21,34 @@ void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
         swap(y0, y1);
     }
 
-    for (int x = x0; x <= x1; x += 1) {
-        float t = (x - x0) / (float) (x1 - x0);
-        int y = y0 + (y1 - y0) * t;
+    const int dx = x1 - x0;
+    const int dy = y1 - y0;
+    // absolute slope. derror <= 1 pixel as we know that dy <= dx
+    const float derror = abs(dy / float(dx));
 
+    float error = 0;
+    int y = y0;
+    for (int x = x0; x <= x1; x += 1) {
         if (steep) {
             image.set(y, x, color); // de-transpose
         } else {
             image.set(x, y, color);
+        }
+
+        error += derror;
+        if (error > 0.5) { // error exceeds a half-pixel
+            y += y1 > y0 ? 1 : -1;
+            error -= 1.0;
         }
     }
 }
 
 int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
     TGAImage image(100, 100, TGAImage::RGB);
-    line(13, 20, 80, 40, image, white); 
-    line(20, 13, 40, 80, image, red); 
-    line(80, 40, 13, 20, image, red);
+    for (int i = 0; i < 1e6; i += 1) {
+        line(13, 20, 80, 40, image, white);
+        line(20, 13, 40, 80, image, red);
+        line(80, 40, 13, 20, image, red);
+    }
     image.write_tga_file("output.tga");
 }
