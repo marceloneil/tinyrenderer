@@ -5,7 +5,7 @@ using namespace std;
 const TGAColor white = TGAColor(255, 255, 255, 255);
 const TGAColor red = TGAColor(255, 0, 0, 255);
 
-void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
+void line(int x0, int y0, int x1, int y1, TGAImage &image, const TGAColor &color) {
     bool steep = false;
 
     // if the line is steep, take it's transpose
@@ -23,22 +23,23 @@ void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
 
     const int dx = x1 - x0;
     const int dy = y1 - y0;
-    // absolute slope. derror <= 1 pixel as we know that dy <= dx
-    const float derror = abs(dy / float(dx));
+    const int derror2 = abs(dy) * 2;
 
-    float error = 0;
+    int error2 = 0;
     int y = y0;
     for (int x = x0; x <= x1; x += 1) {
+        // if the line is steep, de-transpose
         if (steep) {
-            image.set(y, x, color); // de-transpose
+            image.set(y, x, color);
         } else {
             image.set(x, y, color);
         }
 
-        error += derror;
-        if (error > 0.5) { // error exceeds a half-pixel
+        // slope error calculations
+        error2 += derror2;
+        if (error2 > dx) {
             y += y1 > y0 ? 1 : -1;
-            error -= 1.0;
+            error2 -= dx * 2;
         }
     }
 }
