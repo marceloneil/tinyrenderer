@@ -50,9 +50,47 @@ void line(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color) {
 }
 
 void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
-    line(t0, t1, image, color);
-    line(t1, t2, image, color);
-    line(t2, t0, image, color);
+    // sort vertices by y in ascending order
+    if (t0.y > t1.y) swap(t0, t1);
+    if (t0.y > t2.y) swap(t0, t2);
+    if (t1.y > t2.y) swap(t1, t2);
+
+    // draw lower half of triangle
+    int totalHeight = t2.y - t0.y;
+    int segmentHeight = t1.y - t0.y;
+    for (int y = t0.y; y <= t1.y; y += 1) {
+        float alpha = (y - t0.y) / float(totalHeight);
+        float beta = segmentHeight == 0 ? 0 : (y - t0.y) / float(segmentHeight);
+
+        vec2 A = t0 + (t2 - t0) * alpha;
+        vec2 B = t0 + (t1 - t0) * beta;
+
+        if (B.x < A.x) {
+            swap(A, B);
+        }
+
+        for (int x = A.x; x <= B.x; x += 1) {
+            image.set(x, y, color);
+        }
+    }
+
+    // draw upper half of triangle
+    segmentHeight = t2.y - t1.y;
+    for (int y = t2.y; y >= t1.y; y -= 1) {
+        float alpha = (t2.y - y) / float(totalHeight);
+        float beta = segmentHeight == 0 ? 0 : (t2.y - y) / float(segmentHeight);
+
+        vec2 A = t2 + (t0 - t2) * alpha;
+        vec2 B = t2 + (t1 - t2) * beta;
+
+        if (B.x < A.x) {
+            swap(A, B);
+        }
+
+        for (int x = A.x; x <= B.x; x += 1) {
+            image.set(x, y, color);
+        }
+    }
 }
 
 int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
@@ -61,10 +99,12 @@ int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused)))
     vec2 t0[3] = {vec2(10, 70), vec2(50, 160), vec2(70, 80)};
     vec2 t1[3] = {vec2(180, 50), vec2(150, 1), vec2(70, 180)};
     vec2 t2[3] = {vec2(180, 150), vec2(120, 160), vec2(130, 180)};
+    vec2 t3[3] = {vec2(25, 25), vec2(50, 50), vec2(75, 25)};
 
     triangle(t0[0], t0[1], t0[2], image, red);
     triangle(t1[0], t1[1], t1[2], image, white);
     triangle(t2[0], t2[1], t2[2], image, green);
+    triangle(t3[0], t3[1], t3[2], image, blue);
 
     image.write_tga_file("output.tga");
 }
