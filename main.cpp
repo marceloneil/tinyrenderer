@@ -50,42 +50,29 @@ void line(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color) {
 }
 
 void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
+    // ignore degenerate triangles
+    if (t0.y == t1.y && t1.y == t2.y) return;
+
     // sort vertices by y in ascending order
     if (t0.y > t1.y) swap(t0, t1);
     if (t0.y > t2.y) swap(t0, t2);
     if (t1.y > t2.y) swap(t1, t2);
 
-    // draw lower half of triangle
     int totalHeight = t2.y - t0.y;
-    int segmentHeight = t1.y - t0.y;
-    for (int y = t0.y; y <= t1.y; y += 1) {
+    for (int y = t0.y; y <= t0.y + totalHeight; y += 1) {
+        bool secondHalf = y >= t1.y;
+        int segmentHeight = secondHalf ? t2.y - t1.y : t1.y - t0.y;
+
         float alpha = (y - t0.y) / float(totalHeight);
-        float beta = segmentHeight == 0 ? 0 : (y - t0.y) / float(segmentHeight);
+        float beta = 0;
+        if (segmentHeight > 0) {
+            beta = (secondHalf ? y - t1.y : y - t0.y) / float(segmentHeight);
+        }
 
         vec2 A = t0 + (t2 - t0) * alpha;
-        vec2 B = t0 + (t1 - t0) * beta;
+        vec2 B = secondHalf ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
 
-        if (B.x < A.x) {
-            swap(A, B);
-        }
-
-        for (int x = A.x; x <= B.x; x += 1) {
-            image.set(x, y, color);
-        }
-    }
-
-    // draw upper half of triangle
-    segmentHeight = t2.y - t1.y;
-    for (int y = t2.y; y >= t1.y; y -= 1) {
-        float alpha = (t2.y - y) / float(totalHeight);
-        float beta = segmentHeight == 0 ? 0 : (t2.y - y) / float(segmentHeight);
-
-        vec2 A = t2 + (t0 - t2) * alpha;
-        vec2 B = t2 + (t1 - t2) * beta;
-
-        if (B.x < A.x) {
-            swap(A, B);
-        }
+        if (B.x < A.x) swap(A, B);
 
         for (int x = A.x; x <= B.x; x += 1) {
             image.set(x, y, color);
