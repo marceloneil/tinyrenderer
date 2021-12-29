@@ -118,22 +118,49 @@ BarycentricCoords barycentric_crossProduct(vec2 A, vec2 B, vec2 C, vec2 P) {
     // <=>  [u, v, 1] * [B_x - A_x, C_x - A_x, A_x - P_x] = 0
     //      [u, v, 1] * [B_y - A_y, C_y - A_y, A_y - P_y] = 0
     // <=>  [B_x - A_x, C_x - A_x, A_x - P_x] ⨯ [B_y - A_y, C_y - A_y, A_y - P_y] = [u, v, 1]
-    vec3 result = cross(
+    vec3 solution = cross(
         vec3(B.x - A.x, C.x - A.x, A.x - P.x),
         vec3(B.y - A.y, C.y - A.y, A.y - P.y)
     );
 
-    // divide result by some scaling factor 1 * result[2] 
-    double u = result[0] / result[2];
-    double v = result[1] / result[2];
+    // divide solution by some scaling factor 1 * solution[2] 
+    double u = solution[0] / solution[2];
+    double v = solution[1] / solution[2];
     double w = 1 - u - v;
 
     return BarycentricCoords{u, v, w};
 }
 
+// solve for the barycentric coordinates using an inverse matrix
+BarycentricCoords barycentric_matrix(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // assume valid triangles
+    assert(A.x != B.x || B.x != C.x);
+    assert(A.y != B.y || B.y != C.y);
+
+    // solve the system of equations:
+    //      u * B_x + v * C_x + w * A_x = P_x
+    //      u * B_y + v * C_y + w * A_y = P_y
+    //      u + v + w = 1
+    // we can create a matrix with this system, giving us the equation:
+    //      system * [u, v, w] = [P_x, P_y, 1]
+    // if we multiply from the left by the inverse of this matrix, we have:
+    //      [u, v, w] = system^-1 * [P_x, P_y, 1]
+    mat<3,3> system = {
+        vec3(B.x, C.x, A.x),
+        vec3(B.y, C.y, A.y),
+        vec3(1, 1, 1)
+    };
+    vec3 result = vec3(P.x, P.y, 1);
+    vec3 solution = system.invert() * result;
+
+    return BarycentricCoords{solution[0], solution[1], solution[2]};
+}
+
 inline BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
 #if defined(BARYCENTRIC_CROSSPRODUCT)
     return barycentric_crossProduct(A, B, C, P);
+#elif defined(BARYCENTRIC_MATRIX)
+    return barycentric_matrix(A, B, C, P);
 #else
     #error no barycentric method specified
 #endif
