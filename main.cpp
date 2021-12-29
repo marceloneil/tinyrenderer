@@ -52,29 +52,49 @@ void line(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color) {
 void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
     // ignore degenerate triangles
     if (t0.y == t1.y && t1.y == t2.y) return;
+    if (t0.x == t1.x && t1.x == t2.x) return;
 
-    // sort vertices by y in ascending order
-    if (t0.y > t1.y) swap(t0, t1);
-    if (t0.y > t2.y) swap(t0, t2);
-    if (t1.y > t2.y) swap(t1, t2);
+    // bubble sort vertices by y in ascending order
+    vec2 &bottom = t0, &middle = t1, &top = t2;
+    if (bottom.y > middle.y) swap(top, middle);
+    if (bottom.y > top.y) swap(bottom, top);
+    if (middle.y > top.y) swap(middle, top);
 
-    int totalHeight = t2.y - t0.y;
-    for (int y = t0.y; y <= t0.y + totalHeight; y += 1) {
-        bool secondHalf = y >= t1.y;
-        int segmentHeight = secondHalf ? t2.y - t1.y : t1.y - t0.y;
+    // the triangle is made up of three line segments:
+    //  - the "long" segment, which runs directly from bottom to top
+    //    it's the longest segment on the y axis, not necessarily the longest overall
+    //  - the "bottom" segment, which runs from bottom to middle
+    //  - the "top" segment, which runs from middle to top
+    vec2 longSegment = top - bottom;
+    assert(longSegment.y > 1e-3); // height of triangle is non-zero
+    vec2 bottomSegment = middle - bottom;
+    vec2 topSegment = top - middle;
 
-        float alpha = (y - t0.y) / float(totalHeight);
-        float beta = 0;
-        if (segmentHeight > 0) {
-            beta = (secondHalf ? y - t1.y : y - t0.y) / float(segmentHeight);
+    // sweep lines from bottom to top
+    for (int y = bottom.y; y <= top.y; y += 1) {
+        // find the point where the long segment intersects with y
+        float longSegmentRatio = (y - bottom.y) / longSegment.y;
+        vec2 longSegmentIntercept = bottom + longSegment * longSegmentRatio;
+
+        // find the point where the short segment intersects with y
+        vec2 shortSegmentIntercept;
+        if (y <= middle.y && bottom.y != middle.y) {
+            // bottom segment
+            float bottomSegmentRatio = (y - bottom.y) / bottomSegment.y;
+            shortSegmentIntercept = bottom + bottomSegment * bottomSegmentRatio;
+        } else {
+            // top segment
+            float topSegmentRatio = (y - middle.y) / topSegment.y;
+            shortSegmentIntercept = middle + topSegment * topSegmentRatio;
         }
 
-        vec2 A = t0 + (t2 - t0) * alpha;
-        vec2 B = secondHalf ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
+        // find the left and right x-intercepts for this y value
+        int xInterceptLeft = round(longSegmentIntercept.x);
+        int xInterceptRight = round(shortSegmentIntercept.x);
+        if (xInterceptLeft > xInterceptRight) swap(xInterceptLeft, xInterceptRight);
 
-        if (B.x < A.x) swap(A, B);
-
-        for (int x = A.x; x <= B.x; x += 1) {
+        // sweep pixels from left to right
+        for (int x = xInterceptLeft; x <= xInterceptRight; x += 1) {
             image.set(x, y, color);
         }
     }
@@ -87,11 +107,13 @@ int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused)))
     vec2 t1[3] = {vec2(180, 50), vec2(150, 1), vec2(70, 180)};
     vec2 t2[3] = {vec2(180, 150), vec2(120, 160), vec2(130, 180)};
     vec2 t3[3] = {vec2(25, 25), vec2(50, 50), vec2(75, 25)};
+    vec2 t4[3] = {vec2(55, 50), vec2(80, 25), vec2(105, 50)};
 
     triangle(t0[0], t0[1], t0[2], image, red);
     triangle(t1[0], t1[1], t1[2], image, white);
     triangle(t2[0], t2[1], t2[2], image, green);
     triangle(t3[0], t3[1], t3[2], image, blue);
+    triangle(t4[0], t4[1], t4[2], image, blue);
 
     image.write_tga_file("output.tga");
 }
