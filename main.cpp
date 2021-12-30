@@ -6,10 +6,10 @@
 
 using namespace std;
 
-const TGAColor white = TGAColor(255, 255, 255, 255);
-const TGAColor red = TGAColor(255, 0, 0, 255);
-const TGAColor green = TGAColor(0, 255, 0, 255);
-const TGAColor blue = TGAColor(0, 0, 255, 255);
+const TGAColor white = TGAColor(255, 255, 255);
+const TGAColor red = TGAColor(255, 0, 0);
+const TGAColor green = TGAColor(0, 255, 0);
+const TGAColor blue = TGAColor(0, 0, 255);
 
 void line(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color) {
     bool steep = false;
@@ -138,22 +138,49 @@ int main(int argc, char* argv[]) {
     Model model(filename);
     TGAImage image(width, height, TGAImage::RGB);
 
+    // light vector faces directly into the image
+    vec3 lightVector(0, 0, -1);
+
     // draw each face
     for (int face = 0; face < model.nfaces(); face += 1) {
-        // adjust each of the three vertices in the face to the size of the image
-        vec2 vertices[3];
-        for (int vertexIndex = 0; vertexIndex < 3; vertexIndex += 1) {
-            vec3 unadjustedVertex = model.vert(face, vertexIndex);
+        // populate 3D "world" vertices and 2D "screen" vertices
+        vec3 worldVertices[3];
+        vec2 screenVertices[3];
+        for (int vIdx = 0; vIdx < 3; vIdx += 1) {
+            worldVertices[vIdx] = model.vert(face, vIdx);
 
-            // adjust vertex coordinates which are between -1.0 and 1.0
-            vertices[vertexIndex] = vec2(
-                (unadjustedVertex.x / 2.0 + 0.5) * width,
-                (unadjustedVertex.y / 2.0 + 0.5) * height
+            // adjust world vertices which are between -1.0 and 1.0 to be
+            // within the dimensions of the image
+            screenVertices[vIdx] = vec2(
+                (worldVertices[vIdx].x / 2.0 + 0.5) * width,
+                (worldVertices[vIdx].y / 2.0 + 0.5) * height
             );
         }
 
-        TGAColor randomColor(rand() % 255, rand() % 255, rand() % 255);
-        triangle(vertices[0], vertices[1], vertices[2], image, randomColor);
+        // calculate the surface normal of the face (counterclockwise)
+        // the surface normal points out of the visible side of the face
+        vec3 edge01 = worldVertices[1] - worldVertices[0];
+        vec3 edge02 = worldVertices[2] - worldVertices[0];
+        vec3 surfaceNormal = cross(edge01, edge02).normalize();
+
+        // calculate light intensity as the negative dot product of the surface normal
+        // and the light vector
+        // the light intensity will be positive if and only if the light vector
+        // is pointing in the opposite z-direction of the normal. in other words,
+        // it will be positive if the light vector points into the visible part of
+        // the face, and it's intensity is determined by what angle it hits the face
+        double lightIntensity = -(surfaceNormal * lightVector);
+
+        // back-face culling
+        // skip face if the surface normal faces away from the direction of light
+        if (lightIntensity <= 0) continue;
+
+        // draw
+        int shade = lightIntensity * 255;
+        triangle(
+            screenVertices[0], screenVertices[1], screenVertices[2],
+            image, TGAColor(shade, shade, shade)
+        );
     }
 
     image.write_tga_file("output.tga");
