@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <iostream>
+#include <limits>
 
 #include "model.h"
 #include "tgaimage.h"
@@ -107,81 +108,68 @@ void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color)
     }
 }
 
-int main(int argc, char* argv[]) {
-    string filename = "obj/african_head/african_head.obj";
-    int width = 800;
-    int height = 800;
-
-    try {
-        switch (argc) {
-            case 4:
-                height = stoi(argv[3]);
-                if (height < 1) throw 1;
-                // fall through
-            case 3:
-                width = stoi(argv[2]);
-                if (width < 1) throw 1;
-                // fall through
-            case 2:
-                filename = argv[1];
-                // fall through
-            case 1:
-                break;
-            default:
-                throw 1;
-        }
-    } catch (...) {
-        cerr << "Usage: " << argv[0]
-             << " [ filename [ width (> 0) [ height (> 0) ] ] ]" << endl;
+void rasterize(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color, int ybuffer[], int renderHeight) {
+    // make the line left-to-right
+    if (v1.x < v0.x) {
+        swap(v0, v1);
     }
 
-    Model model(filename);
-    TGAImage image(width, height, TGAImage::RGB);
+    for (int x = v0.x; x <= v1.x; x += 1) {
+        // calculate the y-value of the line for this x-value
+        float t = (x - v0.x) / (float) (v1.x - v0.x);
+        int y = v0.y + (v1.y - v0.y) * t;
 
-    // light vector faces directly into the image
-    vec3 lightVector(0, 0, -1);
+        // only draw a pixel if it's the current closest pixel to the camera for that x-value
+        if (ybuffer[x] < y) {
+            ybuffer[x] = y;
 
-    // draw each face
-    for (int face = 0; face < model.nfaces(); face += 1) {
-        // populate 3D "world" vertices and 2D "screen" vertices
-        vec3 worldVertices[3];
-        vec2 screenVertices[3];
-        for (int vIdx = 0; vIdx < 3; vIdx += 1) {
-            worldVertices[vIdx] = model.vert(face, vIdx);
-
-            // adjust world vertices which are between -1.0 and 1.0 to be
-            // within the dimensions of the image
-            screenVertices[vIdx] = vec2(
-                (worldVertices[vIdx].x / 2.0 + 0.5) * width,
-                (worldVertices[vIdx].y / 2.0 + 0.5) * height
-            );
+            for (int renderY = 0; renderY < renderHeight; renderY += 1) {
+                image.set(x, renderY, color);
+            }
         }
+    }
+}
 
-        // calculate the surface normal of the face (counterclockwise)
-        // the surface normal points out of the visible side of the face
-        vec3 edge01 = worldVertices[1] - worldVertices[0];
-        vec3 edge02 = worldVertices[2] - worldVertices[0];
-        vec3 surfaceNormal = cross(edge01, edge02).normalize();
+int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
+    const int width = 800;
+    const int height = 500;
 
-        // calculate light intensity as the negative dot product of the surface normal
-        // and the light vector
-        // the light intensity will be positive if and only if the light vector
-        // is pointing in the opposite z-direction of the normal. in other words,
-        // it will be positive if the light vector points into the visible part of
-        // the face, and it's intensity is determined by what angle it hits the face
-        double lightIntensity = -(surfaceNormal * lightVector);
+    // three line segments from triangles intersecting with the plane
+    vec2 l1[2] = {vec2(20, 34), vec2(744, 400)};
+    vec2 l2[2] = {vec2(120, 434), vec2(444, 400)};
+    vec2 l3[2] = {vec2(330, 463), vec2(594, 200)};
 
-        // back-face culling
-        // skip face if the surface normal faces away from the direction of light
-        if (lightIntensity <= 0) continue;
+    // screen line segment (below the triangles) interesecting with the plane
+    vec2 sl[2] = {vec2(10, 10), vec2(790, 10)};
 
-        // draw
-        int shade = lightIntensity * 255;
-        triangle(
-            screenVertices[0], screenVertices[1], screenVertices[2],
-            image, TGAColor(shade, shade, shade)
-        );
+    // draw 2D scene of intersection with plane
+    {
+        TGAImage scene(width, height, TGAImage::RGB);
+
+        line(l1[0], l1[1], scene, red);
+        line(l2[0], l2[1], scene, green);
+        line(l3[0], l3[1], scene, blue);
+        line(sl[0], sl[1], scene, white);
+
+        scene.write_tga_file("scene.tga");
     }
 
-    image.write_tga_file("output.tga");
+    // draw the render, a top down "1D" view of the slice of triangles
+    {
+        const int renderHeight = 16;
+        TGAImage render(width, renderHeight, TGAImage::RGB);
+
+        // initialize a ybuffer
+        int ybuffer[width];
+        for (int x = 0; x < width; x += 1) {
+            ybuffer[x] = numeric_limits<int>::min();
+        }
+
+        rasterize(l1[0], l1[1], render, red, ybuffer, renderHeight);
+        rasterize(l2[0], l2[1], render, green, ybuffer, renderHeight);
+        rasterize(l3[0], l3[1], render, blue, ybuffer, renderHeight);
+        rasterize(sl[0], sl[1], render, white, ybuffer, renderHeight);
+
+        render.write_tga_file("render.tga");
+    }
 }

@@ -21,3 +21,7 @@ output.tga
 
 # Lesson 1
 gmon.out
+
+# Lesson 2
+scene.tga
+render.tga
