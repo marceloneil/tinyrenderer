@@ -71,8 +71,12 @@ void triangle_lineSweep(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGACol
     vec2 bottomSegment = middle - bottom;
     vec2 topSegment = top - middle;
 
+    // clamp bottom and top of triangle to height of image
+    int yBottomClamped = max((int) round(bottom.y), 0);
+    int yTopClamped = min((int) round(top.y), image.get_height() - 1);
+
     // sweep lines from bottom to top
-    for (int y = bottom.y; y <= top.y; y += 1) {
+    for (int y = yBottomClamped; y <= yTopClamped; y += 1) {
         // find the point where the long segment intersects with y
         float longSegmentRatio = (y - bottom.y) / longSegment.y;
         vec2 longSegmentIntercept = bottom + longSegment * longSegmentRatio;
@@ -93,6 +97,10 @@ void triangle_lineSweep(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGACol
         int xInterceptLeft = round(longSegmentIntercept.x);
         int xInterceptRight = round(shortSegmentIntercept.x);
         if (xInterceptLeft > xInterceptRight) swap(xInterceptLeft, xInterceptRight);
+
+        // clamp left and right intercepts to width of image
+        xInterceptLeft = max(xInterceptLeft, 0);
+        xInterceptRight = min(xInterceptRight, image.get_width() - 1);
 
         // sweep pixels from left to right
         for (int x = xInterceptLeft; x <= xInterceptRight; x += 1) {
