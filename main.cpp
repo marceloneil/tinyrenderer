@@ -191,7 +191,7 @@ BarycentricCoords barycentric_area(vec2 A, vec2 B, vec2 C, vec2 P) {
     // the signed areas are calculated in the basis (AB, AC, k)
     vec2 AB = B - A;
     vec2 AC = C - A;
-    vec3 k = vec3(0, 0, 1); // unit vector, as in (i, j, k)
+    vec3 k = vec3(0, 0, 1); // unit vector k, as in (i, j, k)
 
     // we can derive an equation for AP in this basis
     vec2 AP = P - A;
