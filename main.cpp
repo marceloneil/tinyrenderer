@@ -291,6 +291,7 @@ void triangle_barycentric(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAC
     int yEnd = round(min(bboxmax.y, image.get_height() - 1.0));
 
     // loop through all pixels in bounding box
+#pragma omp parallel for
     for (int x = xStart; x <= xEnd; x += 1) {
         for (int y = yStart; y <= yEnd; y += 1) {
             // check that pixel is within the triangle (simplex)
