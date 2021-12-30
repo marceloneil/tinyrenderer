@@ -21,19 +21,6 @@ enable_cxx_compiler_flag_if_supported("-std=c++14")
 enable_cxx_compiler_flag_if_supported("-O3")
 enable_cxx_compiler_flag_if_supported("-fopenmp")
 
-# Method used to rasterize triangles
-if(NOT TRIANGLE_METHOD)
-    set(TRIANGLE_METHOD BARYCENTRIC)
-endif()
-
-# Method used to compute barycentric coordinates
-if(NOT BARYCENTRIC_METHOD)
-    set(BARYCENTRIC_METHOD SIMPLE)
-endif()
-
-add_definitions(-DTRIANGLE_${TRIANGLE_METHOD})
-add_definitions(-DBARYCENTRIC_${BARYCENTRIC_METHOD})
-
 file(GLOB SOURCES *.h *.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})

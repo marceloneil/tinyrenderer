@@ -49,200 +49,16 @@ void line(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color) {
     }
 }
 
-// draw a triangle by filling in lines of pixels between the line segments of the triangle
-void triangle_lineSweep(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
-    // ignore degenerate triangles
-    if (t0.x == t1.x && t1.x == t2.x) return;
-    if (t0.y == t1.y && t1.y == t2.y) return;
-
-    // bubble sort vertices by y in ascending order
-    vec2 &bottom = t0, &middle = t1, &top = t2;
-    if (bottom.y > middle.y) swap(top, middle);
-    if (bottom.y > top.y) swap(bottom, top);
-    if (middle.y > top.y) swap(middle, top);
-
-    // the triangle is made up of three line segments:
-    //  - the "long" segment, which runs directly from bottom to top
-    //    it's the longest segment on the y axis, not necessarily the longest overall
-    //  - the "bottom" segment, which runs from bottom to middle
-    //  - the "top" segment, which runs from middle to top
-    vec2 longSegment = top - bottom;
-    assert(longSegment.y > 1e-3); // height of triangle is non-zero
-    vec2 bottomSegment = middle - bottom;
-    vec2 topSegment = top - middle;
-
-    // clamp bottom and top of triangle to height of image
-    int yBottomClamped = max((int) round(bottom.y), 0);
-    int yTopClamped = min((int) round(top.y), image.get_height() - 1);
-
-    // sweep lines from bottom to top
-    for (int y = yBottomClamped; y <= yTopClamped; y += 1) {
-        // find the point where the long segment intersects with y
-        float longSegmentRatio = (y - bottom.y) / longSegment.y;
-        vec2 longSegmentIntercept = bottom + longSegment * longSegmentRatio;
-
-        // find the point where the short segment intersects with y
-        vec2 shortSegmentIntercept;
-        if (y <= middle.y && bottom.y != middle.y) {
-            // bottom segment
-            float bottomSegmentRatio = (y - bottom.y) / bottomSegment.y;
-            shortSegmentIntercept = bottom + bottomSegment * bottomSegmentRatio;
-        } else {
-            // top segment
-            float topSegmentRatio = (y - middle.y) / topSegment.y;
-            shortSegmentIntercept = middle + topSegment * topSegmentRatio;
-        }
-
-        // find the left and right x-intercepts for this y value
-        int xInterceptLeft = round(longSegmentIntercept.x);
-        int xInterceptRight = round(shortSegmentIntercept.x);
-        if (xInterceptLeft > xInterceptRight) swap(xInterceptLeft, xInterceptRight);
-
-        // clamp left and right intercepts to width of image
-        xInterceptLeft = max(xInterceptLeft, 0);
-        xInterceptRight = min(xInterceptRight, image.get_width() - 1);
-
-        // sweep pixels from left to right
-        for (int x = xInterceptLeft; x <= xInterceptRight; x += 1) {
-            image.set(x, y, color);
-        }
-    }
-}
-
 struct BarycentricCoords {
     double u, v, w;
 };
 
-// find the barycentric coordinates using a cross product
-BarycentricCoords barycentric_crossProduct(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // solve the equation:
-    //      (1 - u - v) * A + u * B + v * C = P
-    // <=>  u * (B - A) + v * (C - A) + (A - P) = 0
-    // <=>  u * (B_x - A_x) + v * (C_x - A_x) + (A_x - P_x) = 0
-    //      u * (B_y - A_y) + v * (C_y - A_y) + (A_y - P_y) = 0
-    // <=>  [u, v, 1] * [B_x - A_x, C_x - A_x, A_x - P_x] = 0
-    //      [u, v, 1] * [B_y - A_y, C_y - A_y, A_y - P_y] = 0
-    // <=>  [B_x - A_x, C_x - A_x, A_x - P_x] ⨯ [B_y - A_y, C_y - A_y, A_y - P_y] = [u, v, 1]
-    vec3 solution = cross(
-        vec3(B.x - A.x, C.x - A.x, A.x - P.x),
-        vec3(B.y - A.y, C.y - A.y, A.y - P.y)
-    );
+// find the barycentric coordinates of a point P given a triangle ABC
+BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // assume valid triangles
+    assert(A.x != B.x || B.x != C.x);
+    assert(A.y != B.y || B.y != C.y);
 
-    // divide solution by some scaling factor 1 * solution[2] 
-    double u = solution[0] / solution[2];
-    double v = solution[1] / solution[2];
-    double w = 1 - u - v;
-
-    return BarycentricCoords{u, v, w};
-}
-
-// find the barycentric coordinates by solving for the edges using a 2D inverse matrix
-BarycentricCoords barycentric_edgeMatrix(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // solve the equation:
-    //      (1 - u - v) * A + u * B + v * C = P
-    // <=>  u * (B - A) + v * (C - A) = P - A
-    // <=>  u * (B_x - A_x) + v * (C_x - A_x) = P_x - A_x
-    //      u * (B_y - A_y) + v * (C_y - A_y) = P_y - A_y
-    // we can create a matrix with this system of equations, giving us:
-    //      system * [u, v] = P - A
-    // if we multiply from the left by the inverse of this matrix, we have:
-    //      [u, v] = system^-1 * (P - A)
-    // we also know that w = 1 - u - v
-    mat<2,2> system = {
-        vec2(B.x - A.x, C.x - A.x),
-        vec2(B.y - A.y, C.y - A.y)
-    };
-    vec2 solution = system.invert() * (P - A);
-
-    double u = solution[0];
-    double v = solution[1];
-    double w = 1 - u - v;
-
-    return BarycentricCoords{u, v, w};
-}
-
-// find the barycentric coordinates by solving for the vertices using a 3D inverse matrix
-BarycentricCoords barycentric_vertexMatrix(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // solve the system of equations:
-    //      u * B_x + v * C_x + w * A_x = P_x
-    //      u * B_y + v * C_y + w * A_y = P_y
-    //      u + v + w = 1
-    // we can create a matrix with this system, giving us the equation:
-    //      system * [u, v, w] = [P_x, P_y, 1]
-    // if we multiply from the left by the inverse of this matrix, we have:
-    //      [u, v, w] = system^-1 * [P_x, P_y, 1]
-    mat<3,3> system = {
-        vec3(B.x, C.x, A.x),
-        vec3(B.y, C.y, A.y),
-        vec3(1, 1, 1)
-    };
-    vec3 result = vec3(P.x, P.y, 1);
-    vec3 solution = system.invert() * result;
-
-    double u = solution[0];
-    double v = solution[1];
-    double w = solution[2];
-
-    return BarycentricCoords{u, v, w};
-}
-
-// find the barycentric coordinates using signed ratios of areas
-BarycentricCoords barycentric_area(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // the signed areas are calculated in the basis (AB, AC, k)
-    vec2 AB = B - A;
-    vec2 AC = C - A;
-    vec3 k = vec3(0, 0, 1); // unit vector k, as in (i, j, k)
-
-    // we can derive an equation for AP in this basis
-    vec2 AP = P - A;
-
-    // the equation is given by:
-    //      AP = 1 / (AB, AC, k) * ((AP, AC, k) * AB + (AB, AP, k) * AC + (AB, AC, AP) * k)
-    // where (e, f, g) = (e ⨯ f) * g is the mixed product
-    // note that:
-    //  - (AB, AC, k) = (AB ⨯ AC) * k is twice the signed area of the triangle ABC
-    //  - (AP, AC, k) = (AP ⨯ AC) * k is twice the signed area of the triangle APC
-    //  - (AB, AP, k) = (AB ⨯ AP) * k is twice the signed area of the triangle ABP
-    //  - (AB, AC, AP) = (AB ⨯ AC) * AP is zero, as AP is orthogonal AB ⨯ AC
-    // we can then rearrange our equation as
-    //      AP = 1 / (2 * ABC) * ((2 * APC) * AB + (2 * ABP) * AC)
-    //      AP = (APC / ABC) * AB + (ABP / ABC) * AC
-    //      P = A + (APC / ABC) * AB + (ABP / ABC) * AC
-    //      P = (1 - APC / ABC - ABP / ABC) * A + (APC / ABC) * B + (ABP / ABC) * C
-    // finally, we have derived equations for the barycentric coordinates in terms of
-    // the signed areas of ABC, APC and ABP:
-    //      u = APC / ABC
-    //      v = ABP / ABC
-    //      w = 1 - u - v
-
-    // the signed area of the triangle ABC is given by (AB ⨯ AC) * k / 2
-    // the cross product is calculated counterclockwise within our basis (A,B,C)
-    double ABC = cross(vec3(AB.x, AB.y, 0), vec3(AC.x, AC.y, 0)) * k / 2;
-
-    // the signed area of the triangle APC is given by (AP ⨯ AC) * k / 2
-    // the cross product is calculated counterclockwise within our basis (A,P,C)
-    // if P is outside of the triangle ABC, this area will be negative since
-    // the cross product AP ⨯ AC will be facing in the direction -k
-    double APC = cross(vec3(AP.x, AP.y, 0), vec3(AC.x, AC.y, 0)) * k / 2;
-
-    // the signed area of the triangle ABP is given by (AB ⨯ AP) * k / 2
-    // the cross product is calculated counterclockwise within our basis (A,B,P)
-    // if P is outside of the triangle ABC, this area will be negative since
-    // the cross product AB ⨯ AP will be facing in the direction -k
-    double ABP = cross(vec3(AB.x, AB.y, 0), vec3(AP.x, AP.y, 0)) * k / 2;
-
-    // the coordinates are given by the signed area ratio of the opposite subtriangle
-    // for u * B this is ACP, for v * C this is ABP, and for w * A this is BCP
-    double u = APC / ABC;
-    double v = ABP / ABC;
-    double w = 1 - u - v;
-
-    return BarycentricCoords{u, v, w};
-}
-
-// find the barycentric coordinates directly
-// note: all other methods can be simplified down to this method
-BarycentricCoords barycentric_simple(vec2 A, vec2 B, vec2 C, vec2 P) {
     // calculate the edge vectors
     vec2 AB = B - A;
     vec2 AC = C - A;
@@ -256,28 +72,8 @@ BarycentricCoords barycentric_simple(vec2 A, vec2 B, vec2 C, vec2 P) {
     return BarycentricCoords{u, v, w};
 }
 
-inline BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // assume valid triangles
-    assert(A.x != B.x || B.x != C.x);
-    assert(A.y != B.y || B.y != C.y);
-
-#if defined(BARYCENTRIC_CROSSPRODUCT)
-    return barycentric_crossProduct(A, B, C, P);
-#elif defined(BARYCENTRIC_EDGEMATRIX)
-    return barycentric_edgeMatrix(A, B, C, P);
-#elif defined(BARYCENTRIC_VERTEXMATRIX)
-    return barycentric_vertexMatrix(A, B, C, P);
-#elif defined(BARYCENTRIC_AREA)
-    return barycentric_area(A, B, C, P);
-#elif defined(BARYCENTRIC_SIMPLE)
-    return barycentric_simple(A, B, C, P);
-#else
-    #error no barycentric method specified
-#endif
-}
-
 // draw a triangle by testing if individual pixels are within the triangle
-void triangle_barycentric(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
+void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
     // ignore degenerate triangles
     if (t0.x == t1.x && t1.x == t2.x) return;
     if (t0.y == t1.y && t1.y == t2.y) return;
@@ -309,16 +105,6 @@ void triangle_barycentric(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAC
             image.set(x, y, color);
         }
     }
-}
-
-inline void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
-#if defined(TRIANGLE_LINESWEEP)
-    triangle_lineSweep(t0, t1, t2, image, color);
-#elif defined(TRIANGLE_BARYCENTRIC)
-    triangle_barycentric(t0, t1, t2, image, color);
-#else
-    #error no triangle implementation specified
-#endif
 }
 
 int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
