@@ -105,12 +105,9 @@ struct BarycentricCoords {
     double u, v, w;
 };
 
-// solve for the barycentric coordinates using a cross product
+// find the barycentric coordinates using a cross product
 BarycentricCoords barycentric_crossProduct(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // assume valid triangles
-    assert(A.x != B.x || B.x != C.x);
-    assert(A.y != B.y || B.y != C.y);
-
+    // solve the equation:
     //      (1 - u - v) * A + u * B + v * C = P
     // <=>  u * (B - A) + v * (C - A) + (A - P) = 0
     // <=>  u * (B_x - A_x) + v * (C_x - A_x) + (A_x - P_x) = 0
@@ -131,12 +128,33 @@ BarycentricCoords barycentric_crossProduct(vec2 A, vec2 B, vec2 C, vec2 P) {
     return BarycentricCoords{u, v, w};
 }
 
-// solve for the barycentric coordinates using an inverse matrix
-BarycentricCoords barycentric_matrix(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // assume valid triangles
-    assert(A.x != B.x || B.x != C.x);
-    assert(A.y != B.y || B.y != C.y);
+// find the barycentric coordinates by solving for the edges using a 2D inverse matrix
+BarycentricCoords barycentric_edgeMatrix(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // solve the equation:
+    //      (1 - u - v) * A + u * B + v * C = P
+    // <=>  u * (B - A) + v * (C - A) = P - A
+    // <=>  u * (B_x - A_x) + v * (C_x - A_x) = P_x - A_x
+    //      u * (B_y - A_y) + v * (C_y - A_y) = P_y - A_y
+    // we can create a matrix with this system of equations, giving us:
+    //      system * [u, v] = P - A
+    // if we multiply from the left by the inverse of this matrix, we have:
+    //      [u, v] = system^-1 * (P - A)
+    // we also know that w = 1 - u - v
+    mat<2,2> system = {
+        vec2(B.x - A.x, C.x - A.x),
+        vec2(B.y - A.y, C.y - A.y)
+    };
+    vec2 solution = system.invert() * (P - A);
 
+    double u = solution[0];
+    double v = solution[1];
+    double w = 1 - u - v;
+
+    return BarycentricCoords{u, v, w};
+}
+
+// find the barycentric coordinates by solving for the vertices using a 3D inverse matrix
+BarycentricCoords barycentric_vertexMatrix(vec2 A, vec2 B, vec2 C, vec2 P) {
     // solve the system of equations:
     //      u * B_x + v * C_x + w * A_x = P_x
     //      u * B_y + v * C_y + w * A_y = P_y
@@ -153,15 +171,15 @@ BarycentricCoords barycentric_matrix(vec2 A, vec2 B, vec2 C, vec2 P) {
     vec3 result = vec3(P.x, P.y, 1);
     vec3 solution = system.invert() * result;
 
-    return BarycentricCoords{solution[0], solution[1], solution[2]};
+    double u = solution[0];
+    double v = solution[1];
+    double w = solution[2];
+
+    return BarycentricCoords{u, v, w};
 }
 
-// solve for the barycentric coordinates using signed ratios of areas
+// find the barycentric coordinates using signed ratios of areas
 BarycentricCoords barycentric_area(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // assume valid triangles
-    assert(A.x != B.x || B.x != C.x);
-    assert(A.y != B.y || B.y != C.y);
-
     // the signed areas are calculated in the basis (AB, AC, k)
     vec2 AB = B - A;
     vec2 AC = C - A;
@@ -214,13 +232,37 @@ BarycentricCoords barycentric_area(vec2 A, vec2 B, vec2 C, vec2 P) {
     return BarycentricCoords{u, v, w};
 }
 
+// find the barycentric coordinates directly
+// note: all other methods can be simplified down to this method
+BarycentricCoords barycentric_simple(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // calculate the edge vectors
+    vec2 AB = B - A;
+    vec2 AC = C - A;
+    vec2 AP = P - A;
+
+    double denom = AB.x * AC.y - AC.x * AB.y;
+    double u = (AP.x * AC.y - AC.x * AP.y) / denom;
+    double v = (AB.x * AP.y - AP.x * AB.y) / denom;
+    double w = 1 - u - v;
+
+    return BarycentricCoords{u, v, w};
+}
+
 inline BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // assume valid triangles
+    assert(A.x != B.x || B.x != C.x);
+    assert(A.y != B.y || B.y != C.y);
+
 #if defined(BARYCENTRIC_CROSSPRODUCT)
     return barycentric_crossProduct(A, B, C, P);
-#elif defined(BARYCENTRIC_MATRIX)
-    return barycentric_matrix(A, B, C, P);
+#elif defined(BARYCENTRIC_EDGEMATRIX)
+    return barycentric_edgeMatrix(A, B, C, P);
+#elif defined(BARYCENTRIC_VERTEXMATRIX)
+    return barycentric_vertexMatrix(A, B, C, P);
 #elif defined(BARYCENTRIC_AREA)
     return barycentric_area(A, B, C, P);
+#elif defined(BARYCENTRIC_SIMPLE)
+    return barycentric_simple(A, B, C, P);
 #else
     #error no barycentric method specified
 #endif

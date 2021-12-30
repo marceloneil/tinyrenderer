@@ -28,7 +28,7 @@ endif()
 
 # Method used to compute barycentric coordinates
 if(NOT BARYCENTRIC_METHOD)
-    set(BARYCENTRIC_METHOD CROSSPRODUCT)
+    set(BARYCENTRIC_METHOD SIMPLE)
 endif()
 
 add_definitions(-DTRIANGLE_${TRIANGLE_METHOD})
