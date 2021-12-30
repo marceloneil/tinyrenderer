@@ -107,33 +107,54 @@ void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color)
     }
 }
 
-int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
-    TGAImage image(200, 200, TGAImage::RGB);
+int main(int argc, char* argv[]) {
+    string filename = "obj/african_head/african_head.obj";
+    int width = 800;
+    int height = 800;
 
-    vec2 t0[3] = {vec2(10, 70), vec2(50, 160), vec2(70, 80)};
-    vec2 t1[3] = {vec2(180, 50), vec2(150, 1), vec2(70, 180)};
-    vec2 t2[3] = {vec2(180, 150), vec2(120, 160), vec2(130, 180)};
-    vec2 t3[3] = {vec2(25, 25), vec2(30, 50), vec2(75, 25)};
-    vec2 t4[3] = {vec2(65, 60), vec2(105, 15), vec2(110, 60)};
-    vec2 t5[3] = {vec2(160, 120), vec2(250, 140), vec2(250, 50)};
-    vec2 t6[3] = {vec2(-5, 150), vec2(-5, 230), vec2(150, 260)};
+    try {
+        switch (argc) {
+            case 4:
+                height = stoi(argv[3]);
+                if (height < 1) throw 1;
+                // fall through
+            case 3:
+                width = stoi(argv[2]);
+                if (width < 1) throw 1;
+                // fall through
+            case 2:
+                filename = argv[1];
+                // fall through
+            case 1:
+                break;
+            default:
+                throw 1;
+        }
+    } catch (...) {
+        cerr << "Usage: " << argv[0]
+             << " [ filename [ width (> 0) [ height (> 0) ] ] ]" << endl;
+    }
 
-    // degenerate triangles
-    vec2 d0[3] = {vec2(5, 5), vec2(5, 5), vec2(5, 5)};
-    vec2 d1[3] = {vec2(5, 5), vec2(100, 5), vec2(150, 5)};
-    vec2 d2[3] = {vec2(5, 5), vec2(5, 100), vec2(5, 150)};
+    Model model(filename);
+    TGAImage image(width, height, TGAImage::RGB);
 
-    triangle(t0[0], t0[1], t0[2], image, red);
-    triangle(t1[0], t1[1], t1[2], image, white);
-    triangle(t2[0], t2[1], t2[2], image, green);
-    triangle(t3[0], t3[1], t3[2], image, blue);
-    triangle(t4[0], t4[1], t4[2], image, green);
-    triangle(t5[0], t5[1], t5[2], image, red);
-    triangle(t6[0], t6[1], t6[2], image, blue);
+    // draw each face
+    for (int face = 0; face < model.nfaces(); face += 1) {
+        // adjust each of the three vertices in the face to the size of the image
+        vec2 vertices[3];
+        for (int vertexIndex = 0; vertexIndex < 3; vertexIndex += 1) {
+            vec3 unadjustedVertex = model.vert(face, vertexIndex);
 
-    triangle(d0[0], d0[1], d0[2], image, red);
-    triangle(d1[0], d1[1], d1[2], image, red);
-    triangle(d2[0], d2[1], d2[2], image, red);
+            // adjust vertex coordinates which are between -1.0 and 1.0
+            vertices[vertexIndex] = vec2(
+                (unadjustedVertex.x / 2.0 + 0.5) * width,
+                (unadjustedVertex.y / 2.0 + 0.5) * height
+            );
+        }
+
+        TGAColor randomColor(rand() % 255, rand() % 255, rand() % 255);
+        triangle(vertices[0], vertices[1], vertices[2], image, randomColor);
+    }
 
     image.write_tga_file("output.tga");
 }
