@@ -156,11 +156,71 @@ BarycentricCoords barycentric_matrix(vec2 A, vec2 B, vec2 C, vec2 P) {
     return BarycentricCoords{solution[0], solution[1], solution[2]};
 }
 
+// solve for the barycentric coordinates using signed ratios of areas
+BarycentricCoords barycentric_area(vec2 A, vec2 B, vec2 C, vec2 P) {
+    // assume valid triangles
+    assert(A.x != B.x || B.x != C.x);
+    assert(A.y != B.y || B.y != C.y);
+
+    // the signed areas are calculated in the basis (AB, AC, k)
+    vec2 AB = B - A;
+    vec2 AC = C - A;
+    vec3 k = vec3(0, 0, 1); // unit vector, as in (i, j, k)
+
+    // we can derive an equation for AP in this basis
+    vec2 AP = P - A;
+
+    // the equation is given by:
+    //      AP = 1 / (AB, AC, k) * ((AP, AC, k) * AB + (AB, AP, k) * AC + (AB, AC, AP) * k)
+    // where (e, f, g) = (e ⨯ f) * g is the mixed product
+    // note that:
+    //  - (AB, AC, k) = (AB ⨯ AC) * k is twice the signed area of the triangle ABC
+    //  - (AP, AC, k) = (AP ⨯ AC) * k is twice the signed area of the triangle APC
+    //  - (AB, AP, k) = (AB ⨯ AP) * k is twice the signed area of the triangle ABP
+    //  - (AB, AC, AP) = (AB ⨯ AC) * AP is zero, as AP is orthogonal AB ⨯ AC
+    // we can then rearrange our equation as
+    //      AP = 1 / (2 * ABC) * ((2 * APC) * AB + (2 * ABP) * AC)
+    //      AP = (APC / ABC) * AB + (ABP / ABC) * AC
+    //      P = A + (APC / ABC) * AB + (ABP / ABC) * AC
+    //      P = (1 - APC / ABC - ABP / ABC) * A + (APC / ABC) * B + (ABP / ABC) * C
+    // finally, we have derived equations for the barycentric coordinates in terms of
+    // the signed areas of ABC, APC and ABP:
+    //      u = APC / ABC
+    //      v = ABP / ABC
+    //      w = 1 - u - v
+
+    // the signed area of the triangle ABC is given by (AB ⨯ AC) * k / 2
+    // the cross product is calculated counterclockwise within our basis (A,B,C)
+    double ABC = cross(vec3(AB.x, AB.y, 0), vec3(AC.x, AC.y, 0)) * k / 2;
+
+    // the signed area of the triangle APC is given by (AP ⨯ AC) * k / 2
+    // the cross product is calculated counterclockwise within our basis (A,P,C)
+    // if P is outside of the triangle ABC, this area will be negative since
+    // the cross product AP ⨯ AC will be facing in the direction -k
+    double APC = cross(vec3(AP.x, AP.y, 0), vec3(AC.x, AC.y, 0)) * k / 2;
+
+    // the signed area of the triangle ABP is given by (AB ⨯ AP) * k / 2
+    // the cross product is calculated counterclockwise within our basis (A,B,P)
+    // if P is outside of the triangle ABC, this area will be negative since
+    // the cross product AB ⨯ AP will be facing in the direction -k
+    double ABP = cross(vec3(AB.x, AB.y, 0), vec3(AP.x, AP.y, 0)) * k / 2;
+
+    // the coordinates are given by the signed area ratio of the opposite subtriangle
+    // for u * B this is ACP, for v * C this is ABP, and for w * A this is BCP
+    double u = APC / ABC;
+    double v = ABP / ABC;
+    double w = 1 - u - v;
+
+    return BarycentricCoords{u, v, w};
+}
+
 inline BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
 #if defined(BARYCENTRIC_CROSSPRODUCT)
     return barycentric_crossProduct(A, B, C, P);
 #elif defined(BARYCENTRIC_MATRIX)
     return barycentric_matrix(A, B, C, P);
+#elif defined(BARYCENTRIC_AREA)
+    return barycentric_area(A, B, C, P);
 #else
     #error no barycentric method specified
 #endif
