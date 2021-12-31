@@ -25,3 +25,4 @@ gmon.out
 # Lesson 2
 scene.tga
 render.tga
+zbuffer.tga
