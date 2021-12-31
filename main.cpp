@@ -80,7 +80,7 @@ BarycentricCoords barycentric(vec3 vertices[3], vec2 P) {
 }
 
 // draw a triangle by testing if individual pixels are within the triangle
-void triangle(vec3 vertices[3], double zbuffer[], TGAImage &image, const TGAColor &color) {
+void triangle(vec3 vertices[3], vec2 texture[3], double zbuffer[], const Model &model, TGAImage &image) {
     const vec3 &A = vertices[0], &B = vertices[1], &C = vertices[2];
 
     // ignore degenerate triangles
@@ -117,6 +117,15 @@ void triangle(vec3 vertices[3], double zbuffer[], TGAImage &image, const TGAColo
             // draw pixel only if it is "on top" of any others that might've been drawn
             if (zbuffer[x + y * image.get_width()] < z) {
                 zbuffer[x + y * image.get_width()] = z;
+
+                // calculate coordinates of pixel on texture uv-map with barycentric coordinates
+                vec2 uv(
+                    coords.w * texture[0][0] + coords.u * texture[1][0] + coords.v * texture[2][0],
+                    coords.w * texture[0][1] + coords.u * texture[1][1] + coords.v * texture[2][1]
+                );
+
+                // draw pixel
+                TGAColor color = model.diffuse(uv);
                 image.set(x, y, color);
             }
         }
@@ -165,11 +174,13 @@ int main(int argc, char* argv[]) {
 
     // draw each face
     for (int face = 0; face < model.nfaces(); face += 1) {
-        // populate "world" vertices and "screen" vertices
-        vec3 worldVertices[3];
-        vec3 screenVertices[3];
+        // populate vertices
+        vec3 worldVertices[3];      // 3D vertices of the model
+        vec3 screenVertices[3];     // 3D vertices adjusted to image dimensions
+        vec2 textureVertices[3];    // 2D "uv" vertices for the texture of the face
         for (int vIdx = 0; vIdx < 3; vIdx += 1) {
             worldVertices[vIdx] = model.vert(face, vIdx);
+            textureVertices[vIdx] = model.uv(face, vIdx);
 
             // adjust world vertices which are between -1.0 and 1.0 to be
             // within the dimensions of the image
@@ -199,9 +210,7 @@ int main(int argc, char* argv[]) {
         if (lightIntensity <= 0) continue;
 
         // draw
-        int shade = lightIntensity * 255;
-        TGAColor color(shade, shade, shade);
-        triangle(screenVertices, zbuffer.get(), image, color);
+        triangle(screenVertices, textureVertices, zbuffer.get(), model, image);
     }
 
     image.write_tga_file("output.tga");
