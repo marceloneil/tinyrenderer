@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <memory>
 
 #include "model.h"
 #include "tgaimage.h"
@@ -55,8 +56,13 @@ struct BarycentricCoords {
 };
 
 // find the barycentric coordinates of a point P given a triangle ABC
-BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
-    // assume valid triangles
+// the z-value of the triangle vertices are discarded, barycentric coordinates
+// are calculated for the triangle projected onto the xy-plane
+BarycentricCoords barycentric(vec3 vertices[3], vec2 P) {
+    vec2 A = vec2(vertices[0].x, vertices[0].y);
+    vec2 B = vec2(vertices[1].x, vertices[1].y);
+    vec2 C = vec2(vertices[2].x, vertices[2].y);
+
     assert(A.x != B.x || B.x != C.x);
     assert(A.y != B.y || B.y != C.y);
 
@@ -74,19 +80,21 @@ BarycentricCoords barycentric(vec2 A, vec2 B, vec2 C, vec2 P) {
 }
 
 // draw a triangle by testing if individual pixels are within the triangle
-void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color) {
+void triangle(vec3 vertices[3], double zbuffer[], TGAImage &image, const TGAColor &color) {
+    const vec3 &A = vertices[0], &B = vertices[1], &C = vertices[2];
+
     // ignore degenerate triangles
-    if (t0.x == t1.x && t1.x == t2.x) return;
-    if (t0.y == t1.y && t1.y == t2.y) return;
+    if (A.x == B.x && B.x == C.x) return;
+    if (A.y == B.y && B.y == C.y) return;
 
     // find lower left and upper right corners of minimal bounding box
     vec2 bboxmin(
-        min({t0.x, t1.x, t2.x, image.get_width() - 1.0}),
-        min({t0.y, t1.y, t2.y, image.get_height() - 1.0})
+        min({A.x, B.x, C.x, image.get_width() - 1.0}),
+        min({A.y, B.y, C.y, image.get_height() - 1.0})
     );
     vec2 bboxmax(
-        max({t0.x, t1.x, t2.x, 0.0}),
-        max({t0.y, t1.y, t2.y, 0.0})
+        max({A.x, B.x, C.x, 0.0}),
+        max({A.y, B.y, C.y, 0.0})
     );
 
     // clamp bounding box to within image dimensions
@@ -97,79 +105,104 @@ void triangle(vec2 t0, vec2 t1, vec2 t2, TGAImage &image, const TGAColor &color)
 
     // loop through all pixels in bounding box
 #pragma omp parallel for
-    for (int x = xStart; x <= xEnd; x += 1) {
-        for (int y = yStart; y <= yEnd; y += 1) {
-            // check that pixel is within the triangle (simplex)
-            BarycentricCoords coords = barycentric(t0, t1, t2, vec2(x, y));
+    for (int y = yStart; y <= yEnd; y += 1) {
+        for (int x = xStart; x <= xEnd; x += 1) {
+            // check that pixel is within the triangle
+            BarycentricCoords coords = barycentric(vertices, vec2(x, y));
             if (coords.u < 0 || coords.v < 0 || coords.w < 0) continue;
 
-            image.set(x, y, color);
-        }
-    }
-}
+            // calculate depth (z-value) of pixel with barycentric coordinates
+            double z = coords.w * A.z + coords.u * B.z + coords.v * C.z;
 
-void rasterize(vec2 v0, vec2 v1, TGAImage &image, const TGAColor &color, int ybuffer[], int renderHeight) {
-    // make the line left-to-right
-    if (v1.x < v0.x) {
-        swap(v0, v1);
-    }
-
-    for (int x = v0.x; x <= v1.x; x += 1) {
-        // calculate the y-value of the line for this x-value
-        float t = (x - v0.x) / (float) (v1.x - v0.x);
-        int y = v0.y + (v1.y - v0.y) * t;
-
-        // only draw a pixel if it's the current closest pixel to the camera for that x-value
-        if (ybuffer[x] < y) {
-            ybuffer[x] = y;
-
-            for (int renderY = 0; renderY < renderHeight; renderY += 1) {
-                image.set(x, renderY, color);
+            // draw pixel only if it is "on top" of any others that might've been drawn
+            if (zbuffer[x + y * image.get_width()] < z) {
+                zbuffer[x + y * image.get_width()] = z;
+                image.set(x, y, color);
             }
         }
     }
 }
 
-int main(int argc __attribute__((unused)), char* argv[] __attribute__((unused))) {
-    const int width = 800;
-    const int height = 500;
+int main(int argc, char* argv[]) {
+    string filename = "obj/african_head/african_head.obj";
+    int width = 800;
+    int height = 800;
 
-    // three line segments from triangles intersecting with the plane
-    vec2 l1[2] = {vec2(20, 34), vec2(744, 400)};
-    vec2 l2[2] = {vec2(120, 434), vec2(444, 400)};
-    vec2 l3[2] = {vec2(330, 463), vec2(594, 200)};
-
-    // screen line segment (below the triangles) interesecting with the plane
-    vec2 sl[2] = {vec2(10, 10), vec2(790, 10)};
-
-    // draw 2D scene of intersection with plane
-    {
-        TGAImage scene(width, height, TGAImage::RGB);
-
-        line(l1[0], l1[1], scene, red);
-        line(l2[0], l2[1], scene, green);
-        line(l3[0], l3[1], scene, blue);
-        line(sl[0], sl[1], scene, white);
-
-        scene.write_tga_file("scene.tga");
+    try {
+        switch (argc) {
+            case 4:
+                height = stoi(argv[3]);
+                if (height < 1) throw 1;
+                // fall through
+            case 3:
+                width = stoi(argv[2]);
+                if (width < 1) throw 1;
+                // fall through
+            case 2:
+                filename = argv[1];
+                // fall through
+            case 1:
+                break;
+            default:
+                throw 1;
+        }
+    } catch (...) {
+        cerr << "Usage: " << argv[0]
+             << " [ filename [ width (> 0) [ height (> 0) ] ] ]" << endl;
     }
 
-    // draw the render, a top down "1D" view of the slice of triangles
-    {
-        const int renderHeight = 16;
-        TGAImage render(width, renderHeight, TGAImage::RGB);
+    Model model(filename);
+    TGAImage image(width, height, TGAImage::RGB);
 
-        // initialize a ybuffer
-        int ybuffer[width];
-        for (int x = 0; x < width; x += 1) {
-            ybuffer[x] = numeric_limits<int>::min();
+    // light vector faces directly into the image
+    vec3 lightVector(0, 0, -1);
+
+    // initialize z-buffer
+    unique_ptr<double[]> zbuffer(new double[width * height]);
+    for (int idx = 0; idx < width * height; idx += 1) {
+        zbuffer[idx] = numeric_limits<double>::lowest();
+    }
+
+    // draw each face
+    for (int face = 0; face < model.nfaces(); face += 1) {
+        // populate "world" vertices and "screen" vertices
+        vec3 worldVertices[3];
+        vec3 screenVertices[3];
+        for (int vIdx = 0; vIdx < 3; vIdx += 1) {
+            worldVertices[vIdx] = model.vert(face, vIdx);
+
+            // adjust world vertices which are between -1.0 and 1.0 to be
+            // within the dimensions of the image
+            screenVertices[vIdx] = vec3(
+                (worldVertices[vIdx].x / 2.0 + 0.5) * width,
+                (worldVertices[vIdx].y / 2.0 + 0.5) * height,
+                worldVertices[vIdx].z // z value is only used for z-buffer
+            );
         }
 
-        rasterize(l1[0], l1[1], render, red, ybuffer, renderHeight);
-        rasterize(l2[0], l2[1], render, green, ybuffer, renderHeight);
-        rasterize(l3[0], l3[1], render, blue, ybuffer, renderHeight);
-        rasterize(sl[0], sl[1], render, white, ybuffer, renderHeight);
+        // calculate the surface normal of the face (counterclockwise)
+        // the surface normal points out of the visible side of the face
+        vec3 edge01 = worldVertices[1] - worldVertices[0];
+        vec3 edge02 = worldVertices[2] - worldVertices[0];
+        vec3 surfaceNormal = cross(edge01, edge02).normalize();
 
-        render.write_tga_file("render.tga");
+        // calculate light intensity as the negative dot product of the surface normal
+        // and the light vector
+        // the light intensity will be positive if and only if the light vector
+        // is pointing in the opposite z-direction of the normal. in other words,
+        // it will be positive if the light vector points into the visible part of
+        // the face, and it's intensity is determined by what angle it hits the face
+        double lightIntensity = -(surfaceNormal * lightVector);
+
+        // back-face culling
+        // skip face if the surface normal faces away from the direction of light
+        if (lightIntensity <= 0) continue;
+
+        // draw
+        int shade = lightIntensity * 255;
+        TGAColor color(shade, shade, shade);
+        triangle(screenVertices, zbuffer.get(), image, color);
     }
+
+    image.write_tga_file("output.tga");
 }
