@@ -205,22 +205,4 @@ int main(int argc, char* argv[]) {
     }
 
     image.write_tga_file("output.tga");
-
-    // draw view of zbuffer
-    TGAImage zbufferView(width, height, TGAImage::RGB);
-    for (int y = 0; y < zbufferView.get_height(); y += 1) {
-        for (int x = 0; x < zbufferView.get_width(); x += 1) {
-            // skip pixels that weren't added to zbuffer
-            if (zbuffer[x + y * zbufferView.get_width()] < -1) continue;
-
-            // scale z-value of -1 to 1 to a shade of 0 to 255
-            int shade = (zbuffer[x + y * zbufferView.get_width()] / 2 + 0.5) * 255;
-
-            // draw pixel
-            TGAColor color(shade, shade, shade);
-            zbufferView.set(x, y, color);
-        }
-    }
-
-    zbufferView.write_tga_file("zbuffer.tga");
 }
