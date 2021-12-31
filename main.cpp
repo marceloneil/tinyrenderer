@@ -80,7 +80,7 @@ BarycentricCoords barycentric(vec3 vertices[3], vec2 P) {
 }
 
 // draw a triangle by testing if individual pixels are within the triangle
-void triangle(vec3 vertices[3], vec2 texture[3], double zbuffer[], const Model &model, TGAImage &image) {
+void triangle(vec3 vertices[3], vec2 texture[3], double zbuffer[], double intensity, const Model &model, TGAImage &image) {
     const vec3 &A = vertices[0], &B = vertices[1], &C = vertices[2];
 
     // ignore degenerate triangles
@@ -125,7 +125,7 @@ void triangle(vec3 vertices[3], vec2 texture[3], double zbuffer[], const Model &
                 );
 
                 // draw pixel
-                TGAColor color = model.diffuse(uv);
+                TGAColor color = model.diffuse(uv) * intensity;
                 image.set(x, y, color);
             }
         }
@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
         if (lightIntensity <= 0) continue;
 
         // draw
-        triangle(screenVertices, textureVertices, zbuffer.get(), model, image);
+        triangle(screenVertices, textureVertices, zbuffer.get(), lightIntensity, model, image);
     }
 
     image.write_tga_file("output.tga");
