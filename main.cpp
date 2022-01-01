@@ -56,8 +56,8 @@ struct BarycentricCoords {
 };
 
 // find the barycentric coordinates of a point P given a triangle ABC
-// the z-value of the triangle vertices are discarded, barycentric coordinates
-// are calculated for the triangle projected onto the xy-plane
+// the z-value of the triangle vertices are discarded, as the barycentric coordinates
+// are calculated for the standard orthogonal projection of the triangle onto the xy-plane
 BarycentricCoords barycentric(vec3 vertices[3], vec2 P) {
     vec2 A = vec2(vertices[0].x, vertices[0].y);
     vec2 B = vec2(vertices[1].x, vertices[1].y);
