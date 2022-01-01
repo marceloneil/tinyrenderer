@@ -172,6 +172,11 @@ int main(int argc, char* argv[]) {
         zbuffer[idx] = numeric_limits<double>::lowest();
     }
 
+    // perspective projection transformation matrix
+    double cameraDistance = 5.0;
+    mat<4, 4> perspective = mat<4, 4>::identity();
+    perspective[3][2] = -1 / cameraDistance;
+
     // draw each face
     for (int face = 0; face < model.nfaces(); face += 1) {
         // populate vertices
@@ -179,16 +184,26 @@ int main(int argc, char* argv[]) {
         vec3 screenVertices[3];     // 3D vertices adjusted to image dimensions
         vec2 textureVertices[3];    // 2D "uv" vertices for the texture of the face
         for (int vIdx = 0; vIdx < 3; vIdx += 1) {
-            worldVertices[vIdx] = model.vert(face, vIdx);
-            textureVertices[vIdx] = model.uv(face, vIdx);
+            // apply perspective projection to the world vertices through a matrix transformation
+            // note: the projection is done in 4D space, so we extend the 3D vertex into
+            // a 4D vertex with the 4th value of 1. when converting back, we divide the
+            // x, y and z values by the transformed 4th value
+            vec4 projectedWorldVertex = perspective * embed<4,3>(model.vert(face, vIdx), 1);
+            worldVertices[vIdx] = vec3(
+                projectedWorldVertex[0] / projectedWorldVertex[3],
+                projectedWorldVertex[1] / projectedWorldVertex[3],
+                projectedWorldVertex[2] / projectedWorldVertex[3]
+            );
 
-            // adjust world vertices which are between -1.0 and 1.0 to be
-            // within the dimensions of the image
+            // adjust world vertices which are between -1.0 and 1.0 to be within the dimensions
+            // of the image, forming the screen vertices
             screenVertices[vIdx] = vec3(
                 (worldVertices[vIdx].x / 2.0 + 0.5) * width,
                 (worldVertices[vIdx].y / 2.0 + 0.5) * height,
                 worldVertices[vIdx].z // z value is only used for z-buffer
             );
+
+            textureVertices[vIdx] = model.uv(face, vIdx);
         }
 
         // calculate the surface normal of the face (counterclockwise)
