@@ -81,9 +81,8 @@ BarycentricCoords barycentric(vec3 vertices[3], vec2 P) {
 
 // draw a triangle by testing if individual pixels are within the triangle
 void triangle(
-    vec3 vertices[3], vec2 texture[3], vec3 normals[3],
-    double zbuffer[], vec3 lightVector,
-    const Model &model, TGAImage &image
+    vec3 vertices[3], vec2 texture[3], double lightIntensities[3],
+    double zbuffer[], const Model &model, TGAImage &image
 ) {
     const vec3 &A = vertices[0], &B = vertices[1], &C = vertices[2];
 
@@ -125,11 +124,10 @@ void triangle(
                 // calculate coordinates of pixel on texture uv-map with barycentric coordinates
                 vec2 uv = coords.w * texture[0] + coords.u * texture[1] + coords.v * texture[2];
 
-                // interpolate normal of vector with barycentric coordinates
-                vec3 normal = coords.w * normals[0] + coords.u * normals[1] + coords.v * normals[2];
-
-                // calculate the light intensity
-                double lightIntensity = -(normal * lightVector);
+                // interpolate light intensities of pixel with barycentric coordinates
+                double lightIntensity = coords.w * lightIntensities[0]
+                                        + coords.u * lightIntensities[1]
+                                        + coords.v * lightIntensities[2];
 
                 // draw pixel
                 TGAColor color = model.diffuse(uv) * lightIntensity;
@@ -190,7 +188,7 @@ int main(int argc, char* argv[]) {
         vec3 worldVertices[3];      // 3D vertices of the model
         vec3 screenVertices[3];     // 3D vertices adjusted to image dimensions
         vec2 textureVertices[3];    // 2D "uv" vertices for the texture of the face
-        vec3 vertexNormals[3];      // normals for each of the 3D vertices
+        double lightIntensities[3]; // light intensities for each of the 3D vertices
         for (int vIdx = 0; vIdx < 3; vIdx += 1) {
             // apply perspective projection to the world vertices through a matrix transformation
             // note: the projection is done in 4D space, so we extend the 3D vertex into
@@ -213,7 +211,8 @@ int main(int argc, char* argv[]) {
 
             textureVertices[vIdx] = model.uv(face, vIdx);
 
-            vertexNormals[vIdx] = model.normal(face, vIdx);
+            // calculate the light intensity at this vertex
+            lightIntensities[vIdx] = -(model.normal(face, vIdx) * lightVector);
         }
 
         // calculate the surface normal of the face (counterclockwise)
@@ -228,7 +227,7 @@ int main(int argc, char* argv[]) {
         if (surfaceNormal * lightVector >= 0) continue;
 
         // draw
-        triangle(screenVertices, textureVertices, vertexNormals, zbuffer.get(), lightVector, model, image);
+        triangle(screenVertices, textureVertices, lightIntensities, zbuffer.get(), model, image);
     }
 
     image.write_tga_file("output.tga");
